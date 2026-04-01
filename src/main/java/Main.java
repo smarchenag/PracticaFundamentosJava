@@ -13,6 +13,10 @@ import LambdasAndStreams.Practice2.Order;
 import LambdasAndStreams.Practice3.Address;
 import LambdasAndStreams.Practice3.User;
 import LambdasAndStreams.Practice3.UserService;
+import LambdasAndStreams.Practice4.Combiner;
+import LambdasAndStreams.Practice4.Pipeline;
+import LambdasAndStreams.Practice4.Validator;
+import LambdasAndStreams.Practice5.Student;
 import ManejoExcepciones.Practice1.*;
 import ManejoExcepciones.Practice2.*;
 import ManejoExcepciones.Practice3.Bank;
@@ -26,7 +30,69 @@ import java.util.stream.Collectors;
 public class Main {
 
     public static void main(String[] args) {
-        practice3LambdasAndStreams();
+        practice5LambdasAndStreams();
+    }
+
+    public static void practice5LambdasAndStreams() {
+        List<Student> students = Arrays.asList(
+                new Student("Ana",     "Engineering", 4.5, 22),
+                new Student("Carlos",  "Medicine",    3.8, 25),
+                new Student("María",   "Engineering", 4.5, 20),
+                new Student("José",    "Law",         4.1, 23),
+                new Student("Laura",   "Medicine",    4.5, 22),
+                new Student("Pedro",   "Engineering", 3.9, 21),
+                new Student("Isabel",  "Law",         4.1, 24),
+                new Student("Miguel",  "Medicine",    3.7, 26)
+        );
+        System.out.println("Por GPA descendente");
+        System.out.println(students.stream().sorted(Comparator.comparing(Student::getGpa).reversed()).toList());
+
+        System.out.println("Por carrera alfabeticamente, luego por GPA descendente");
+        System.out.println(students.stream().sorted(Comparator.comparing(Student::getCareer).thenComparing(Comparator.comparing(Student::getGpa).reversed())).toList());
+
+        System.out.println("Por carrera alfabética, luego por GPA descendente, \n" +
+                "    luego por nombre alfabético (desempate final)");
+        System.out.println(students.stream()
+                .sorted(Comparator.comparing(Student::getCareer).thenComparing(Comparator.comparing(Student::getGpa).reversed()).thenComparing(Student::getName))
+                .toList());
+
+        System.out.println("Por edad ascendente, luego por nombre descendente");
+        System.out.println(students.stream().sorted(
+                Comparator.comparing(Student::getAge)
+                        .thenComparing(Comparator.comparing(Student::getName).reversed())
+            ).toList()
+        );
+
+        System.out.println("El estudiante con mejor GPA de cada carrera");
+        System.out.println(students.stream().collect(Collectors.groupingBy(Student::getCareer, Collectors.maxBy(Comparator.comparing(Student::getGpa)))));
+    }
+
+    public static void practice4LambdasAndStreams() {
+//        Pipeline<String> pipelineStr = new Pipeline<>(" hola mundo ").map(String::trim).map(String::toUpperCase)
+//                .map(str -> str.replaceAll("\\s", "_")).map(str -> {
+//                    System.out.println(str);
+//                    return str;
+//                });
+        String resultado = new Pipeline<>(" hola mundo ")
+                .map(String::trim)
+                .map(String::toUpperCase)
+                .map(str -> str.replaceAll("\\s", "_"))
+                .get();
+        System.out.println(resultado);
+        try {
+            Pipeline<Integer> pipelineInteger = new Pipeline<>(-5).validate((entero) -> entero >= 0,"Valor negativo")
+                    .map(i -> i * 10);
+            Validator<Integer> positiveValidator = value -> value >= 0;
+            new Pipeline<>(-5).validate(positiveValidator, "Valor negativo");
+        } catch (IllegalArgumentException e) {
+            System.out.println(
+                    e.getMessage()
+            );
+        }
+
+        Combiner<String, String, String> combiner = (nombre, apellido) -> apellido.toUpperCase() +", "+ nombre;
+        String res = combiner.combine("Juan","Garia");
+        System.out.println(res);
     }
 
     public static void practice3LambdasAndStreams() {
