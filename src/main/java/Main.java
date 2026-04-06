@@ -9,6 +9,10 @@ import CollectionsAndGenerics.Practice4A.SocialNetwork;
 import CollectionsAndGenerics.Practice4B.CityRoutes;
 import CollectionsAndGenerics.Practice5.Inventory;
 import CollectionsAndGenerics.Practice5.Product;
+import HilosYConcurrencia.Practice1.AtomicCounter;
+import HilosYConcurrencia.Practice1.SynchronizedCounter;
+import HilosYConcurrencia.Practice1.UnsafeCounter;
+import HilosYConcurrencia.Practice2.SharedBuffer;
 import LambdasAndStreams.Practice2.Order;
 import LambdasAndStreams.Practice3.Address;
 import LambdasAndStreams.Practice3.User;
@@ -25,12 +29,240 @@ import Practica3.*;
 import Practica4.*;
 
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 public class Main {
 
-    public static void main(String[] args) {
-        practice5LambdasAndStreams();
+    public static void main(String[] args) throws InterruptedException, ExecutionException {
+        practice4HilosYConcurrencia();
+    }
+
+    public static void practice4HilosYConcurrencia () {
+        List<CompletableFuture<Void>> pipelines = new ArrayList<>();
+
+        for (int i = 1; i <= 5; i++) {
+            int id = i;
+            CompletableFuture<Void> pipeline = CompletableFuture.supplyAsync(() -> {
+                        if( id == 3) throw new RuntimeException("User 3 not found");
+                        return fetchUser(id);
+                    })
+                    .thenApplyAsync(Main::fetchEmail)
+                    .thenAcceptAsync(email -> System.out.println(sendWelcome(email)))
+                    .exceptionally(ex -> {
+                        System.out.println("Error: " + ex.getCause().getMessage());
+                        return null;
+                    });
+            pipelines.add(pipeline);
+        }
+        CompletableFuture.allOf(pipelines.toArray(new CompletableFuture[0])).join();
+        System.out.println("Todos los email enviados");
+    }
+
+    public static String fetchUser (int id) {
+        try {
+            Thread.sleep(300);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        return "User_" + id;
+    }
+
+    public static String fetchEmail (String user) {
+        try {
+            Thread.sleep(200);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        return user + "@company.com";
+    }
+
+    public static String sendWelcome (String email) {
+        try {
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        return "Welcome sent to: " + email;
+    }
+
+    public static void practice3HilosYConcurrencia() throws InterruptedException, ExecutionException {
+        ExecutorService executorService = Executors.newFixedThreadPool(4);
+        /*for (int i = 1; i <= 10; i++) {
+            int finalI = i;
+            Runnable tarea =  () -> {
+                try {
+                    System.out.println("Procesando request: " + finalI + " en hilo: " + Thread.currentThread().getName());
+                    Thread.sleep(ThreadLocalRandom.current().nextInt(500,1501));
+                    System.out.println("Request " + finalI + " Completada");
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            };
+            executorService.submit(tarea);
+        }*/
+        List<Future<String>> futures = new ArrayList<>();
+
+        for (int i = 0; i < 10; i++) {
+            int id = i;
+            Future<String> future = executorService.submit( () -> {
+                System.out.println("Procesando request: " + id + " en hilo: " + Thread.currentThread().getName());
+                try {
+                    Thread.sleep(ThreadLocalRandom.current().nextInt(500,1501));
+                    return "Resultado del request #" + id +
+                            " (hilo: " + Thread.currentThread().getName() + ")";
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(e);
+                }
+            });
+            futures.add(future);
+        }
+
+        executorService.shutdown();
+        executorService.awaitTermination(30,TimeUnit.SECONDS);
+        // Recolectá resultados en orden
+        for (Future<String> f : futures) {
+            System.out.println(f.get()); // ya terminaron → no bloquea en la práctica
+        }
+    }
+
+    public static void practice2HilosYConcurrencia() throws InterruptedException {
+        SharedBuffer sharedBuffer = new SharedBuffer(5);
+        Runnable tareaProducer = () -> {
+            for (int i = 0; i < 20; i++) {
+                try {
+                    sharedBuffer.produce(i);
+                    Thread.sleep(50);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        };
+
+        Runnable tareaConsumer = () -> {
+            for (int i = 0; i < 20; i++) {
+                try {
+                    sharedBuffer.consume();
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        };
+
+        BlockingQueue<Integer> queue = new LinkedBlockingQueue<>(5);
+        Runnable t2Producer = () -> {
+            for (int i = 0; i < 20; i++) {
+                try {
+                    queue.put(i);
+                    System.out.println("Produced: " + i + " | Size: " + queue.size());
+                    Thread.sleep(50);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        };
+
+        Runnable t2Consumer = () -> {
+            for (int i = 0; i < 20; i++) {
+                try {
+                    int value = queue.take();
+                    System.out.println("Consumed: " + value + " | Size: " + queue.size());
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        };
+
+        System.out.println("Ejecucion Parte A");
+
+        Thread tProducer = new Thread(tareaProducer);
+        Thread tConsumer = new Thread(tareaConsumer);
+        tProducer.start();
+        tConsumer.start();
+        tProducer.join();
+        tConsumer.join();
+        System.out.println("--------------------------");
+        System.out.println("Ejecucion Parte B");
+        Thread tProducer2 = new Thread(t2Producer);
+        Thread tConsumer2 = new Thread(t2Consumer);
+        tProducer2.start();
+        tConsumer2.start();
+        tProducer2.join();
+        tConsumer2.join();
+    }
+
+    public static void practice1HilosYConcurrencia () throws InterruptedException {
+        AtomicCounter atomicCounter = new AtomicCounter();
+        SynchronizedCounter synchronizedCounter = new SynchronizedCounter();
+        UnsafeCounter  unsafeCounter = new UnsafeCounter();
+        List<Thread>  threads = new ArrayList<>();
+
+        Runnable tarea = () -> {
+            for (int i = 0; i < 1000; i++) {
+                atomicCounter.increment();
+            }
+        };
+
+        for (int i = 0; i < 10; i++) {
+            Thread t =  new Thread(tarea);
+            t.start();
+            threads.add(t);
+        }
+
+
+        for (Thread t : threads) {
+            t.join(); // espera que termine antes de seguir
+        }
+        System.out.println("Atomic Counter");
+        System.out.println(atomicCounter.getCounter());
+
+        System.out.println("Se limpia la lista");
+
+        threads.clear();
+
+        Runnable tarea2 = () -> {
+            for (int i = 0; i < 1000; i++) {
+                synchronizedCounter.increment();
+            }
+        };
+
+        for (int i = 0; i < 10; i++) {
+            Thread t =  new Thread(tarea2);
+            t.start();
+            threads.add(t);
+        }
+
+
+        for (Thread t : threads) {
+            t.join(); // espera que termine antes de seguir
+        }
+        System.out.println("Synchronized Counter");
+        System.out.println(synchronizedCounter.getCounter());
+
+        System.out.println("Se limpia la lista");
+        threads.clear();
+
+        Runnable tarea3 = () -> {
+            for (int i = 0; i < 1000; i++) {
+                unsafeCounter.increment();
+            }
+        };
+
+        for (int i = 0; i < 10; i++) {
+            Thread t =  new Thread(tarea3);
+            t.start();
+            threads.add(t);
+        }
+
+
+        for (Thread t : threads) {
+            t.join(); // espera que termine antes de seguir
+        }
+        System.out.println("Unsafe Counter");
+        System.out.println(unsafeCounter.getCounter());
     }
 
     public static void practice5LambdasAndStreams() {
